@@ -1,0 +1,120 @@
+= Working Example of Spring-Data-REST findByDate method
+:experimental:
+:source-highlighter: coderay
+:toc:
+:toclevels: 5
+:toc-placement: preamble
+:sectnums:
+:main_package: link:./src/main/java/com/example
+:test_package: link:./src/test/java/com/example
+:UserHistory: {main_package}/model/UserHistory.java[UserHistory]
+:UserHistoryPK: {main_package}/model/UserHistoryPK.java[UserHistoryPK]
+:UserHistoryDao: {main_package}/dao/UserHistoryDao.java[UserHistoryDao]
+:UserHistoryPkDao: {main_package}/dao/UserHistoryPkDao.java[UserHistoryPkDao]
+:DataLoader: {main_package}/DataLoader.java[DataLoader]
+:build_gradle: link:./build.gradle[build.gradle]
+:main_resources: link:./src/main/resources/
+:application_properties: {main_resources}application.properties[application.properties]
+
+toc::[]
+
+== Quick links to files
+
+Model classes:
+
+* {UserHistory}
+* {UserHistoryPK}
+
+Dao classes:
+
+* {UserHistoryDao}
+* {UserHistoryPkDao}
+
+== Description
+
+=== The "findBy" method itself
+
+The working method that finds by `fromDate` and `toDate` is in
+{UserHistoryPkDao}, and looks like that
+
+```java
+@Repository
+public interface UserHistoryDao extends
+        PagingAndSortingRepository<UserHistory, Long> {
+
+    Page<UserHistory> findByUserHistoryPK_FromDateLessThanEqualAndUserHistoryPK_ToDateGreaterThanEqual(
+            @DateTimeFormat(pattern = "yyyy-MM-dd") @Param("from") Date from,
+            @DateTimeFormat(pattern = "yyyy-MM-dd") @Param("to") Date to,
+            Pageable pageable
+    );
+
+}
+```
+
+I was not able to do it your way, because 
+
+* It did not allow me to write `findByUserHistoryPK_FromDateLessThanEqualAndToDateGreaterThanEqual`.
+It had to specify the `UserHistoryPK` before the `ToDateGreaterThan` as you can see above
+
+* I was no able to use `@EmbeddedId`, so I just decided to let my `UserHistory` and `UserHistoryPK`
+to be in `@OneToOne` relationship.
+
+NOTE: without `@DateTimeFormat` this will give `IllegalArgumentException: Cannot covert error`
+
+=== The "toDate" and "fromDate" fields
+
+I had to annotated them as `@Temporal` as you probably read from many 
+StackOverflow and other posts. This way I save my entities in Database
+as "1970-01-02", completely ingnoring milliseconds of `java.util.Date`.
+Hope it is the way you wanted program to work. 
+
+Here is fragment of {UserHistoryPK} below: 
+
+```java
+    // IMPORTANT: we use @Temporal, so that our Date will
+    // be saved in SQL table as "1970-01-02", i.e.
+    // milliseconds will be ignored
+    @Temporal(TemporalType.DATE)
+    private Date fromDate;
+
+    @Temporal(TemporalType.DATE)
+    private Date toDate;
+```
+
+=== How to run
+
+I used H2 server database, see {application_properties}:
+
+```text
+spring.datasource.url = jdbc:h2:tcp://localhost/./data/test-db
+```
+
+So that before you hit `bootRun`, please launch H2 server by running in
+project root:
+
+```text
+java -cp h2-1.4.190.jar org.h2.tools.Server
+```
+
+This way you can see how `fromDate` and `toDate` are stored.
+
+=== How to make GET request with "findBy"
+
+If you want to get stuff using HAL-browser, it goes like this
+
+```
+http://localhost:8080/api/v1/browser/index.html#http://localhost:8080/api/v1/userHistories/search/findByUserHistoryPK_FromDateLessThanEqualAndUserHistoryPK_ToDateGreaterThanEqual?from=1970-01-02&to=1970-01-02
+```
+
+And without HAL, it is as simple as
+
+```
+http://localhost:8080/api/v1/userHistories/search/findByUserHistoryPK_FromDateLessThanEqualAndUserHistoryPK_ToDateGreaterThanEqual?from=1970-01-02&to=1970-01-02
+```
+
+=== About DataLoader and temporary database
+
+I used {DataLoader} class that `implements ApplicationRunner`, so
+that it creates 60 `UserHistory`-ies. I didn't think much
+about `fromDate` and `toDate` but at least request in previous
+example works just fine.
